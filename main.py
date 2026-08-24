@@ -1,5 +1,4 @@
-def main() -> None:
-    print("Hello from NexusDoc AI")
+from llmops import main
 
 
 if __name__ == "__main__":

@@ -8,3 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+.env
+
+# Data folder: ignore everything inside data/, but keep the folder itself
+# (Git doesn't track empty folders, so .gitkeep is used to track the folder)
+data/*
+!data/.gitkeep
