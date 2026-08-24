@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>{{ app_name }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="mark" aria-hidden="true">N</div>
+          <div>
+            <h1>{{ app_name }}</h1>
+            <p>{{ app_tagline }}</p>
+          </div>
+        </div>
+        <div id="status-chip" class="status-chip">
+          <span class="dot"></span>
+          <span id="status-label">Awaiting documents</span>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel sidebar" id="uploader">
+          <div>
+            <h2>Document workspace</h2>
+            <p class="lede">
+              Upload PDF, DOCX, or TXT files. NexusDoc indexes them with MMR
+              retrieval so you can ask grounded questions.
+            </p>
+          </div>
+
+          <form id="upload-form">
+            <div id="dropzone">
+              <p>Drop files here</p>
+              <p class="hint-line">PDF · DOCX · TXT</p>
+              <label class="btn" style="margin-top: 14px">
+                Choose files
+                <input
+                  id="file-input"
+                  type="file"
+                  name="files"
+                  accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                  multiple
+                  hidden
+                />
+              </label>
+            </div>
+
+            <div id="file-list" class="file-list" hidden></div>
+
+            <div class="actions">
+              <button id="upload-btn" class="btn-primary" type="submit">
+                Upload &amp; index
+              </button>
+              <span id="indexing" class="hint" hidden>
+                <span class="spinner"></span>Indexing…
+              </span>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel chat-panel" id="chat">
+          <div class="chat-head">
+            <div>
+              <h2>Conversation</h2>
+              <div id="session-label" class="session-id">No active session</div>
+            </div>
+            <button id="reset-btn" class="btn-ghost" type="button">
+              New session
+            </button>
+          </div>
+
+          <div id="messages" class="messages">
+            <div id="empty-state" class="empty-state">
+              <strong>Ready when your documents are.</strong>
+              Index a set of files, then ask a question about their contents.
+            </div>
+          </div>
+
+          <div class="composer">
+            <textarea
+              id="message-input"
+              rows="2"
+              placeholder="Ask about your documents…"
+              disabled
+            ></textarea>
+            <div
+              class="actions"
+              style="flex-direction: column; align-items: stretch"
+            >
+              <button id="send-btn" class="btn-primary" disabled>Send</button>
+              <span id="thinking" class="hint" hidden>
+                <span class="spinner"></span>Thinking…
+              </span>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+      const $ = (sel) => document.querySelector(sel);
+      const STORAGE_KEY = "nexusdoc_session_id";
+      let sessionId = "";
+
+      function apiDetail(payload, fallback) {
+        if (!payload) return fallback;
+        if (typeof payload.detail === "string") return payload.detail;
+        if (Array.isArray(payload.detail) && payload.detail[0]?.msg) {
+          return payload.detail[0].msg;
+        }
+        return fallback;
+      }
+
+      function formatBytes(bytes) {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      function renderFiles() {
+        const files = $("#file-input").files;
+        const list = $("#file-list");
+        list.innerHTML = "";
+        if (!files || files.length === 0) {
+          list.hidden = true;
+          return;
+        }
+        list.hidden = false;
+        Array.from(files).forEach((file) => {
+          const row = document.createElement("div");
+          row.className = "file-row";
+          row.innerHTML = `<span>${file.name}</span><span>${formatBytes(file.size)}</span>`;
+          list.appendChild(row);
+        });
+      }
+
+      function setReady(ready) {
+        const chip = $("#status-chip");
+        const input = $("#message-input");
+        const send = $("#send-btn");
+        chip.classList.toggle("ready", ready);
+        $("#status-label").textContent = ready
+          ? "Indexed and ready"
+          : "Awaiting documents";
+        $("#session-label").textContent = ready
+          ? `Session ${sessionId}`
+          : "No active session";
+        input.disabled = !ready;
+        send.disabled = !ready;
+      }
+
+      function resetSession() {
+        sessionId = "";
+        localStorage.removeItem(STORAGE_KEY);
+        $("#messages").innerHTML = `
+          <div id="empty-state" class="empty-state">
+            <strong>Ready when your documents are.</strong>
+            Index a set of files, then ask a question about their contents.
+          </div>`;
+        setReady(false);
+      }
+
+      async function uploadFiles(evt) {
+        evt.preventDefault();
+        const files = $("#file-input").files;
+        if (!files || files.length === 0) {
+          toast("Please choose at least one PDF, DOCX, or TXT file.");
+          return;
+        }
+        toggleIndexing(true);
+        try {
+          const fd = new FormData();
+          for (const f of files) fd.append("files", f);
+          const res = await fetch("/upload", { method: "POST", body: fd });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(apiDetail(data, "Upload failed"));
+          sessionId = data.session_id;
+          localStorage.setItem(STORAGE_KEY, sessionId);
+          $("#messages").innerHTML = `
+            <div id="empty-state" class="empty-state">
+              <strong>Documents indexed.</strong>
+              Ask a question to start the conversation.
+            </div>`;
+          setReady(true);
+          toast(data.message || "Indexing complete. You can chat now.");
+        } catch (e) {
+          console.error(e);
+          toast(e.message || "Indexing failed. Try re-uploading.");
+        } finally {
+          toggleIndexing(false);
+        }
+      }
+
+      async function sendMessage() {
+        const input = $("#message-input");
+        const text = input.value.trim();
+        if (!sessionId) {
+          toast("Please upload documents first.");
+          return;
+        }
+        if (!text) return;
+        appendMessage("user", text);
+        input.value = "";
+        toggleThinking(true);
+        try {
+          const res = await fetch("/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: sessionId, message: text }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = apiDetail(data, "Chat failed");
+            if (/invalid or expired session/i.test(detail)) resetSession();
+            throw new Error(detail);
+          }
+          appendMessage("assistant", data.answer);
+        } catch (e) {
+          console.error(e);
+          toast(e.message || "Thinking failed. Try again.");
+        } finally {
+          toggleThinking(false);
+        }
+      }
+
+      function appendMessage(role, text) {
+        const empty = $("#empty-state");
+        if (empty) empty.remove();
+        const bubble = document.createElement("div");
+        bubble.className = "bubble " + (role === "user" ? "user" : "assistant");
+        bubble.textContent = text;
+        $("#messages").appendChild(bubble);
+        $("#messages").scrollTop = $("#messages").scrollHeight;
+      }
+
+      function toggleIndexing(on) {
+        $("#upload-btn").disabled = on;
+        $("#indexing").hidden = !on;
+      }
+
+      function toggleThinking(on) {
+        $("#send-btn").disabled = on || !sessionId;
+        $("#thinking").hidden = !on;
+      }
+
+      function toast(msg) {
+        const el = $("#toast");
+        el.textContent = msg;
+        el.style.opacity = "1";
+        setTimeout(() => (el.style.opacity = "0"), 2800);
+      }
+
+      window.addEventListener("DOMContentLoaded", async () => {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          try {
+            const res = await fetch(`/session/${encodeURIComponent(saved)}`);
+            const data = await res.json();
+            if (data.valid) {
+              sessionId = saved;
+              setReady(true);
+              const empty = $("#empty-state");
+              if (empty) {
+                empty.innerHTML = `
+                  <strong>Session restored.</strong>
+                  Ask another question about the documents already indexed in this process.`;
+              }
+            } else {
+              localStorage.removeItem(STORAGE_KEY);
+            }
+          } catch (_) {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        }
+
+        $("#upload-form").addEventListener("submit", uploadFiles);
+        $("#send-btn").addEventListener("click", sendMessage);
+        $("#reset-btn").addEventListener("click", resetSession);
+        $("#file-input").addEventListener("change", renderFiles);
+        $("#message-input").addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+          }
+        });
+
+        const drop = $("#dropzone");
+        drop.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          drop.classList.add("hover");
+        });
+        drop.addEventListener("dragleave", () =>
+          drop.classList.remove("hover"),
+        );
+        drop.addEventListener("drop", (e) => {
+          e.preventDefault();
+          drop.classList.remove("hover");
+          $("#file-input").files = e.dataTransfer.files;
+          renderFiles();
+        });
+      });
+    </script>
+  </body>
+</html>
