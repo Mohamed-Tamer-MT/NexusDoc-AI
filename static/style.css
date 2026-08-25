@@ -150,10 +150,16 @@ body {
   line-height: 1.5;
 }
 
+.upload-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 #dropzone {
   border: 1px dashed rgba(148, 163, 184, 0.35);
   border-radius: 14px;
-  padding: 28px 16px;
+  padding: 26px 16px;
   text-align: center;
   background: rgba(255, 255, 255, 0.02);
   transition:
@@ -193,6 +199,14 @@ button {
 .btn-primary {
   background: linear-gradient(180deg, #6ea8ff, var(--accent-strong));
   color: white;
+}
+
+.file-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16px;
+  min-width: 132px;
 }
 
 .btn-ghost {
@@ -235,6 +249,11 @@ button:disabled {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.upload-actions {
+  align-items: center;
+  padding-top: 2px;
 }
 
 .hint {
@@ -345,6 +364,10 @@ button:disabled {
   background: var(--bg-input);
   color: var(--text);
   font: inherit;
+}
+
+#message-input::placeholder {
+  color: rgba(147, 160, 194, 0.72);
 }
 
 #message-input:focus {

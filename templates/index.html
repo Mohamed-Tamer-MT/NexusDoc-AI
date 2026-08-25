@@ -39,11 +39,11 @@
             </p>
           </div>
 
-          <form id="upload-form">
+          <form id="upload-form" class="upload-form">
             <div id="dropzone">
               <p>Drop files here</p>
               <p class="hint-line">PDF · DOCX · TXT</p>
-              <label class="btn" style="margin-top: 14px">
+              <label class="btn file-picker">
                 Choose files
                 <input
                   id="file-input"
@@ -58,7 +58,7 @@
 
             <div id="file-list" class="file-list" hidden></div>
 
-            <div class="actions">
+            <div class="actions upload-actions">
               <button id="upload-btn" class="btn-primary" type="submit">
                 Upload &amp; index
               </button>
@@ -92,13 +92,14 @@
               id="message-input"
               rows="2"
               placeholder="Ask about your documents…"
-              disabled
             ></textarea>
             <div
               class="actions"
               style="flex-direction: column; align-items: stretch"
             >
-              <button id="send-btn" class="btn-primary" disabled>Send</button>
+              <button id="send-btn" class="btn-primary" type="button" disabled>
+                Send
+              </button>
               <span id="thinking" class="hint" hidden>
                 <span class="spinner"></span>Thinking…
               </span>
@@ -114,6 +115,7 @@
       const $ = (sel) => document.querySelector(sel);
       const STORAGE_KEY = "nexusdoc_session_id";
       let sessionId = "";
+      let isThinking = false;
 
       function apiDetail(payload, fallback) {
         if (!payload) return fallback;
@@ -149,8 +151,6 @@
 
       function setReady(ready) {
         const chip = $("#status-chip");
-        const input = $("#message-input");
-        const send = $("#send-btn");
         chip.classList.toggle("ready", ready);
         $("#status-label").textContent = ready
           ? "Indexed and ready"
@@ -158,8 +158,7 @@
         $("#session-label").textContent = ready
           ? `Session ${sessionId}`
           : "No active session";
-        input.disabled = !ready;
-        send.disabled = !ready;
+        updateSendState();
       }
 
       function resetSession() {
@@ -252,8 +251,14 @@
       }
 
       function toggleThinking(on) {
-        $("#send-btn").disabled = on || !sessionId;
+        isThinking = on;
+        updateSendState();
         $("#thinking").hidden = !on;
+      }
+
+      function updateSendState() {
+        const hasText = $("#message-input").value.trim().length > 0;
+        $("#send-btn").disabled = isThinking || !hasText;
       }
 
       function toast(msg) {
@@ -290,6 +295,7 @@
         $("#send-btn").addEventListener("click", sendMessage);
         $("#reset-btn").addEventListener("click", resetSession);
         $("#file-input").addEventListener("change", renderFiles);
+        $("#message-input").addEventListener("input", updateSendState);
         $("#message-input").addEventListener("keydown", (e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
