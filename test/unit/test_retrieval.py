@@ -1,7 +1,7 @@
 import pathlib
 
 import pytest
-from exception.custom_exception import DocumentPortalException
+from multi_doc_chat.exception.custom_exception import DocumentPortalException
 
 from multi_doc_chat.src.document_chat.retrieval import ConversationalRAG
 

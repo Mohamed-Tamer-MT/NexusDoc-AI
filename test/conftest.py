@@ -69,8 +69,6 @@ class _StubLLM:
 
 @pytest.fixture
 def stub_model_loader(monkeypatch):
-    # Patch both module paths to cover imports via `utils.model_loader` and `multi_doc_chat.utils.model_loader`
-    import utils.model_loader as ml_mod
     from multi_doc_chat.utils import model_loader as ml_mod2
 
     class FakeApiKeyMgr:
@@ -101,8 +99,13 @@ def stub_model_loader(monkeypatch):
         def load_llm(self):
             return _StubLLM()
 
-    monkeypatch.setattr(ml_mod, "ApiKeyManager", FakeApiKeyMgr)
-    monkeypatch.setattr(ml_mod, "ModelLoader", FakeModelLoader)
+    try:
+        import utils.model_loader as ml_mod
+        monkeypatch.setattr(ml_mod, "ApiKeyManager", FakeApiKeyMgr)
+        monkeypatch.setattr(ml_mod, "ModelLoader", FakeModelLoader)
+    except ImportError:
+        pass
+
     monkeypatch.setattr(ml_mod2, "ApiKeyManager", FakeApiKeyMgr)
     monkeypatch.setattr(ml_mod2, "ModelLoader", FakeModelLoader)
 
