@@ -23,8 +23,8 @@ The system uses Google Generative AI embeddings for vectorization and supports G
 ```mermaid
 flowchart TB
     A[Client Browser] --> B[FastAPI App]
-    B --> C[/upload]
-    B --> D[/chat]
+    B --> C["/upload"]
+    B --> D["/chat"]
     
     C --> E[ChatIngestor]
     E --> F[Document Loader]
